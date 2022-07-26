@@ -2,10 +2,11 @@
 This library supports the INA260 sensor from Texas Instruments with
 MicroPython using the I2C bus.
 """
-import logging
 import utime
+from machine import I2C
 from math import trunc
 from micropython import const
+
 
 class INA260:
     _REG_CONFIG = const(0x00)  # CONFIGURATION REGISTER (R/W)
@@ -91,7 +92,6 @@ class INA260:
     | ``AveragingCount.COUNT_1024`` | 1024                               |
     +-------------------------------+------------------------------------+
     """
-
     COUNT_1 = const(0x0)
     COUNT_4 = const(0x1)
     COUNT_16 = const(0x2)
@@ -100,6 +100,8 @@ class INA260:
     COUNT_256 = const(0x5)
     COUNT_512 = const(0x6)
     COUNT_1024 = const(0x7)
+
+    AVERAGING_VALS = [ COUNT_1, COUNT_4, COUNT_16, COUNT_64, COUNT_128, COUNT_256, COUNT_512, COUNT_1024 ]
 
     __AVG2_VALUE = 11
     __AVG1_VALUE = 10
@@ -118,40 +120,49 @@ class INA260:
     INA260_ID = const(0x227)
 
     # LSB 1.25 mV
-    _VOLTAGE_LSB = const(1.25)
+    _VOLTAGE_LSB = 1.25
     # LSB 10 mW - maximum that can be returned in 419.43 W
     _POWER_LSB = const(10)
     # LSB 1.25 mA
-    _CURRENT_LSB = const(1.25)
+    _CURRENT_LSB = 1.25
 
     ## TODO : Add function for averaging count
 
-    def __init__(self, i2c, address=0x40):
+    def __init__(self, i2c = None, address=0x40, sda='P9', scl='P10'):
+        if i2c is not None:
+            self._i2c = i2c
+        else:
+            self.i2c = I2C(0, mode=I2C.MASTER, pins(sda, scl))
+        
+        self._sda = sda
+        self._scl = scl
         self._i2c = i2c
         self._address = address
 
         self.temp_store = 0xFFFF
 
-        self._manufacturer_id = self.__read_register(self._REG_MFG_UID)
+        self._manufacturer_id = self.__read_register(_REG_MFG_UID)
 
-        if self._manufacturer_id != self.TEXAS_INSTRUMENT_ID:
+        if self._manufacturer_id != TEXAS_INSTRUMENT_ID:
             raise RuntimeError(
                 "Failed to find Texas InstrumentID, read {} while expected {}"
                 " - check your wiring!".format(
                     self._manufactuerer_id,
-                    self.TEXAS_INSTRUMENT_ID
+                    TEXAS_INSTRUMENT_ID
                 )
             )
 
-        self._device_id = self._read_register(self._REG_DIE_UID)
+        self._device_id = self._read_register(_REG_DIE_UID)
 
-        if self._device_id != self.INA260_ID:
+        if self._device_id != INA260_ID:
             raise RuntimeError (
                 "Failed to find INA260 ID, read {} while expected {}"
                 " - check your wiring".format(
                     self._device_id,
                     self.INA260_ID)
             )
+        
+        
 
     def configure(self):
         ## TODO : Complete configure
@@ -177,6 +188,30 @@ class INA260:
         power = self._raw_power() * 10
         return power
 
+    def reset(self):
+        """
+        Generates a system reset of the INA260 that is the same
+        as the power-on reset.
+        Resets all resgiters to default values.
+        Register self clears.
+        """
+        self._set_register_bit(_REG_CONFIG, 15, 1)
+
+    def set_averaging_mode(self, averages):
+        if averages not in AVERAGING_VALS:
+            # TODO: Logging / Debugging
+            return
+        
+        # Get register value
+        reg = self.__read_register(_REG_CONFIG)
+
+        # Shift new averaging value to correct position
+        # Then OR it with current register value
+        reg = reg | ( average << 9)
+
+        # Write register value
+        self.__write_register(__REG_CONFIG, reg)
+
     def _raw_current(self):
         return self.__read_register(self._REG_CURRENT, True)
 
@@ -187,7 +222,6 @@ class INA260:
         return self._read_register(self._REG_POWER)
 
     def _configuration_register(self, register_value):
-        self._log.debug("configuration: 0x%04x", register_value)
         self.__write_register(self._REG_CONFIG, register_value)
 
     def _read_register_bit(self, register, register_bit):
