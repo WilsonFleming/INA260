@@ -125,6 +125,8 @@ class INA260:
     _POWER_LSB = const(10)
     # LSB 1.25 mA
     _CURRENT_LSB = 1.25
+    # LSB 10 mW
+    _POWER_LSB = 10
 
     ## TODO : Add function for averaging count
 
@@ -172,20 +174,20 @@ class INA260:
         """
         Returns the bus current in milliamps
         """
-        return self._raw_current() * self._CURRENT_LSB
+        return self._raw_current() * _CURRENT_LSB
 
     def voltage(self):
         """
         Returns the bus voltage in milliVolts
         """
-        return self._raw_voltage() * self._VOLTAGE_LSB
+        return self._raw_voltage() * _VOLTAGE_LSB
 
     def power(self):
         """
         Returns the power consumed in mW
         """
         # TODO : Check register for power overflow
-        power = self._raw_power() * 10
+        power = self._raw_power() * _POWER_LSB
         return power
 
     def reset(self):
@@ -213,16 +215,16 @@ class INA260:
         self.__write_register(__REG_CONFIG, reg)
 
     def _raw_current(self):
-        return self.__read_register(self._REG_CURRENT, True)
+        return self.__read_register(_REG_CURRENT, True)
 
     def _raw_voltage(self):
-        return self._read_register(self._REG_BUSVOLTAGE)
+        return self._read_register(_REG_BUSVOLTAGE)
 
     def _raw_power(self):
-        return self._read_register(self._REG_POWER)
+        return self._read_register(_REG_POWER)
 
     def _configuration_register(self, register_value):
-        self.__write_register(self._REG_CONFIG, register_value)
+        self.__write_register(_REG_CONFIG, register_value)
 
     def _read_register_bit(self, register, register_bit):
         configuration = self.__read_register(register)
