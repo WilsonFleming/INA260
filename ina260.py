@@ -9,14 +9,14 @@ from micropython import const
 
 
 class INA260:
-    _REG_CONFIG = const(0x00)  # CONFIGURATION REGISTER (R/W)
-    _REG_CURRENT = const(0x01)  # SHUNT VOLTAGE REGISTER (R)
-    _REG_BUSVOLTAGE = const(0x02)  # BUS VOLTAGE REGISTER (R)
-    _REG_POWER = const(0x03)  # POWER REGISTER (R)
-    _REG_MASK_ENABLE = const(0x06)  # MASK ENABLE REGISTER (R/W)
-    _REG_ALERT_LIMIT = const(0x07)  # ALERT LIMIT REGISTER (R/W)
-    _REG_MFG_UID = const(0xFE)  # MANUFACTURER UNIQUE ID REGISTER (R)
-    _REG_DIE_UID = const(0xFF)  # DIE UNIQUE ID REGISTER (R)
+    __REG_CONFIG = const(0x00)  # CONFIGURATION REGISTER (R/W)
+    __REG_CURRENT = const(0x01)  # SHUNT VOLTAGE REGISTER (R)
+    __REG_BUSVOLTAGE = const(0x02)  # BUS VOLTAGE REGISTER (R)
+    __REG_POWER = const(0x03)  # POWER REGISTER (R)
+    __REG_MASK_ENABLE = const(0x06)  # MASK ENABLE REGISTER (R/W)
+    __REG_ALERT_LIMIT = const(0x07)  # ALERT LIMIT REGISTER (R/W)
+    __REG_MFG_UID = const(0xFE)  # MANUFACTURER UNIQUE ID REGISTER (R)
+    __REG_DIE_UID = const(0xFF)  # DIE UNIQUE ID REGISTER (R)
 
     """Modes avaible to be set
     +--------------------+---------------------------------------------------------------------+
@@ -37,6 +37,8 @@ class INA260:
     SHUTDOWN = const(0x0)
     TRIGGERED = const(0x3)
     CONTINUOUS = const(0x7)
+
+    _OPERATING_MODES = [ SHUTDOWN, TRIGGERED, CONTINUOUS ]
 
     """Options for ``current_conversion_time`` or ``voltage_conversion_time``
     +----------------------------------+------------------+
@@ -68,6 +70,8 @@ class INA260:
     TIME_2_116_ms = const(0x5)
     TIME_4_156_ms = const(0x6)
     TIME_8_244_ms = const(0x7)
+
+    _TIMES = [ TIME_140_us, TIME_204_us, TIME_332_us, TIME_558_us, TIME_1_1_ms, TIME_2_116_ms, TIME_4_156_ms, TIME_8_244_ms ]
 
     ## TODO : add function for time enum
 
@@ -103,18 +107,18 @@ class INA260:
 
     AVERAGING_VALS = [ COUNT_1, COUNT_4, COUNT_16, COUNT_64, COUNT_128, COUNT_256, COUNT_512, COUNT_1024 ]
 
-    __AVG2_VALUE = 11
-    __AVG1_VALUE = 10
-    __AVG0_VALUE = 9
-    __VBUSCT2_VALUE = 8
-    __VBUSCT1_VALUE = 7
-    __VBUSCT0_VALUE = 6
-    __ISHCT2_VALUE = 5
-    __ISHCT1_VALUE = 4
-    __ISHCT0_VALUE = 3
-    __MODE3_VALUE = 2
-    __MODE2_VALUE = 1
-    __MODE1_VALUE = 0
+    _AVG2_VALUE = 11
+    _AVG1_VALUE = 10
+    _AVG0_VALUE = 9
+    _VBUSCT2_VALUE = 8
+    _VBUSCT1_VALUE = 7
+    _VBUSCT0_VALUE = 6
+    _ISHCT2_VALUE = 5
+    _ISHCT1_VALUE = 4
+    _ISHCT0_VALUE = 3
+    _MODE3_VALUE = 2
+    _MODE2_VALUE = 1
+    _MODE1_VALUE = 0
 
     TEXAS_INSTRUMENT_ID = const(0x5449)
     INA260_ID = const(0x227)
@@ -122,11 +126,9 @@ class INA260:
     # LSB 1.25 mV
     _VOLTAGE_LSB = 1.25
     # LSB 10 mW - maximum that can be returned in 419.43 W
-    _POWER_LSB = const(10)
+    _POWER_LSB = 10
     # LSB 1.25 mA
     _CURRENT_LSB = 1.25
-    # LSB 10 mW
-    _POWER_LSB = 10
 
     ## TODO : Add function for averaging count
 
@@ -134,7 +136,7 @@ class INA260:
         if i2c is not None:
             self._i2c = i2c
         else:
-            self.i2c = I2C(0, mode=I2C.MASTER, pins(sda, scl))
+            self.i2c = I2C(0, mode=I2C.MASTER, pins=(sda, scl))
         
         self._sda = sda
         self._scl = scl
@@ -143,7 +145,7 @@ class INA260:
 
         self.temp_store = 0xFFFF
 
-        self._manufacturer_id = self.__read_register(_REG_MFG_UID)
+        self._manufacturer_id = self.__read_register(__REG_MFG_UID)
 
         if self._manufacturer_id != TEXAS_INSTRUMENT_ID:
             raise RuntimeError(
@@ -154,7 +156,7 @@ class INA260:
                 )
             )
 
-        self._device_id = self._read_register(_REG_DIE_UID)
+        self._device_id = ( self.__read_register(__REG_DIE_UID) >> 4 )
 
         if self._device_id != INA260_ID:
             raise RuntimeError (
@@ -165,7 +167,6 @@ class INA260:
             )
         
         
-
     def configure(self):
         ## TODO : Complete configure
         return
@@ -174,20 +175,20 @@ class INA260:
         """
         Returns the bus current in milliamps
         """
-        return self._raw_current() * _CURRENT_LSB
+        return self.__raw_current() * self._CURRENT_LSB
 
     def voltage(self):
         """
         Returns the bus voltage in milliVolts
         """
-        return self._raw_voltage() * _VOLTAGE_LSB
+        return self.__raw_voltage() * self._VOLTAGE_LSB
 
     def power(self):
         """
         Returns the power consumed in mW
         """
         # TODO : Check register for power overflow
-        power = self._raw_power() * _POWER_LSB
+        power = self.__raw_power() * self._POWER_LSB
         return power
 
     def reset(self):
@@ -197,47 +198,91 @@ class INA260:
         Resets all resgiters to default values.
         Register self clears.
         """
-        self._set_register_bit(_REG_CONFIG, 15, 1)
+        self.__set_register_bit(__REG_CONFIG, 15, 1)
 
-    def set_averaging_mode(self, averages):
-        if averages not in AVERAGING_VALS:
+    def set_averaging_mode(self, average):
+        if average not in self.AVERAGING_VALS:
             # TODO: Logging / Debugging
             return
         
         # Get register value
-        reg = self.__read_register(_REG_CONFIG)
+        reg = self.__read_register(__REG_CONFIG)
 
-        # Shift new averaging value to correct position
-        # Then OR it with current register value
-        reg = reg | ( average << 9)
+        mask = 0xE00
+
+        reg = (reg & ~mask) | ((average << 9) & mask)
 
         # Write register value
         self.__write_register(__REG_CONFIG, reg)
 
-    def _raw_current(self):
-        return self.__read_register(_REG_CURRENT, True)
+    def set_operating_mode(self, mode):
+        if mode not in self._OPERATING_MODES:
+            # TODO: Logging/Debug
+            return
 
-    def _raw_voltage(self):
-        return self._read_register(_REG_BUSVOLTAGE)
+        reg = self.__read_register(__REG_CONFIG)
 
-    def _raw_power(self):
-        return self._read_register(_REG_POWER)
+        mask = 0x7
 
-    def _configuration_register(self, register_value):
-        self.__write_register(_REG_CONFIG, register_value)
+        reg = (reg & ~mask) | (mode & mask)
 
-    def _read_register_bit(self, register, register_bit):
+        self.__write_register(__REG_CONFIG, reg)
+
+    def set_vbus_conversion_timer(self, conversion_time):
+        if conversion_time not in self._TIMES:
+            print("Failed")
+            # TODO: Logging/Debugging
+            return
+
+        reg = self.__read_register(__REG_CONFIG)
+
+        mask = 0x1c0
+
+        reg = (reg & ~mask) | (( conversion_time << 6 ) & mask)
+
+        self.__write_register(__REG_CONFIG, reg)
+
+    def set_shunt_current_conversion_timer(self, conversion_time):
+        if conversion_time not in self._TIMES:
+            print("Failed")
+            # TODO: Logging
+            return
+
+        reg = self.__read_register(__REG_CONFIG)
+
+        mask = 0x38
+
+        reg = (reg & ~mask) | ((conversion_time << 3 ) & mask)
+
+        self.__write_register(__REG_CONFIG, reg)
+
+    def get_configuration(self):
+        return self.__read_register(__REG_CONFIG)
+
+    def __raw_current(self):
+        return self.__read_register(__REG_CURRENT, True)
+
+    def __raw_voltage(self):
+        return self.__read_register(__REG_BUSVOLTAGE)
+
+    def __raw_power(self):
+        return self.__read_register(__REG_POWER)
+
+    def __configuration_register(self, register_value):
+        self.__write_register(__REG_CONFIG, register_value)
+
+    def __read_register_bit(self, register, register_bit):
         configuration = self.__read_register(register)
         return ((configuration & ( 1 << register_bit)) >> register_bit)
 
-    def _set_register_bit(self, register, register_bit, value):
+    def __set_register_bit(self, register, register_bit, value):
         reg = self.__read_register(self, register)
         if ((reg & ( 1<< register_bit)) >> register_bit) != value:
             register_bytes = reg ^ (1 << register_bit)
             self.__write_register(register, register_bytes)
 
-    def _read_configuration(self):
-        return self.__read_register(self._REG_CONFIG)
+    def __read_configuration(self):
+        return self.__read_register(self.__REG_CONFIG)
 
     def __write_register(self, register, register_value):
         register_bytes = self.__to_bytes(register_value)
@@ -258,3 +303,4 @@ class INA260:
 
     def __to_bytes(self, register_value):
         return bytearray([(register_value >> 8) & 0xFF, register_value & 0xFF])
+
